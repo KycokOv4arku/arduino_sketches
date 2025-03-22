@@ -1,9 +1,12 @@
 /*
+ * rgb_led_controlled_by_encoder.ino
  * Arduino Pro Nano RGB LED Test with Encoder Control
  *
  * This sketch allows controlling an RGB LED with:
- * - Button press to cycle through 5 brightness levels
- * - Encoder rotation to cycle through fixed colors
+ * - Button press to cycle through 4 brightness levels
+ *     100%, 75%, 50%, 0% (OFF).
+ *     For my LED dimming lower than 50% turnes many colors off.
+ * - Encoder rotation to cycle through fixed 8 colors (rainbow + white)
  *
  * RGB LED Pin Connections:
  * D12 - Red
@@ -38,23 +41,22 @@ int currentEncoderA;
 int colorIndex = 0;
 
 // Brightness control
-byte brightness = 0;                                    // Index for brightness levels
-const byte brightnessLevels[] = {255, 191, 128, 64, 0}; // 100%, 75%, 50%, 25%, 0% (OFF)
-const int numBrightnessLevels = 5;
+byte brightness = 0;                                // Index for brightness levels
+const byte brightnessLevels[] = {255, 191, 128, 0}; // 100%, 75%, 50%, 0% (OFF)
+const int numBrightnessLevels = 4;
 
-// Fixed color array - RGB values for each color
+// Fixed color array - RGB values in rainbow order starting with white
 const byte colors[][3] = {
-    {255, 0, 0},     // Red
-    {0, 255, 0},     // Green
-    {0, 0, 255},     // Blue
-    {255, 255, 0},   // Yellow
-    {255, 0, 255},   // Purple
-    {0, 255, 255},   // Cyan
     {255, 255, 255}, // White
+    {255, 0, 0},     // Red
     {255, 128, 0},   // Orange
-    {128, 0, 128}    // Dark Purple
+    {255, 255, 0},   // Yellow
+    {0, 255, 0},     // Green
+    {0, 255, 255},   // Cyan
+    {0, 0, 255},     // Blue
+    {255, 0, 255}    // Purple
 };
-const int numColors = 9;
+const int numColors = 8;
 
 // Variables for button debouncing
 unsigned long lastButtonPress = 0;
@@ -99,30 +101,63 @@ void setup()
 
 void loop()
 {
-    // Check for encoder rotation (simple state-based detection)
+    // Encoder detection that changes color after two transitions on pin A
     currentEncoderA = digitalRead(ENCODER_S1_PIN);
 
-    // If we detected a transition on encoder A pin
+    // Check for change in encoder A pin
     if (currentEncoderA != lastEncoderA)
     {
-        // If encoder B pin is different than A pin, we're rotating clockwise
-        // Otherwise we're rotating counterclockwise
-        if (digitalRead(ENCODER_S2_PIN) != currentEncoderA)
-        {
-            // Clockwise - increment color
-            colorIndex = (colorIndex + 1) % numColors;
-        }
-        else
-        {
-            // Counterclockwise - decrement color
-            colorIndex = (colorIndex + numColors - 1) % numColors;
-        }
+        static int transitionCount = 0;
+        static int lastDirection = 0;
+        static unsigned long lastChangeTime = 0;
+        int direction = 0;
 
-        updateRGB();
-        printCurrentColor();
+        // Simple debounce
+        if (millis() - lastChangeTime > 5)
+        {
+            // Determine direction based on the state of B pin
+            if (digitalRead(ENCODER_S2_PIN) != currentEncoderA)
+            {
+                // Clockwise
+                direction = 1;
+            }
+            else
+            {
+                // Counterclockwise
+                direction = -1;
+            }
 
-        // Short delay to prevent multiple readings
-        delay(10);
+            // If direction changed, reset count
+            if (lastDirection != 0 && direction != lastDirection)
+            {
+                transitionCount = 0;
+            }
+
+            // Count transitions in the same direction
+            transitionCount++;
+            lastDirection = direction;
+
+            // Change color after two transitions in the same direction
+            if (transitionCount >= 2)
+            {
+                if (direction == 1)
+                {
+                    // Clockwise - increment color
+                    colorIndex = (colorIndex + 1) % numColors;
+                }
+                else
+                {
+                    // Counterclockwise - decrement color
+                    colorIndex = (colorIndex + numColors - 1) % numColors;
+                }
+
+                updateRGB();
+                printCurrentColor();
+                transitionCount = 0; // Reset count after changing color
+            }
+
+            lastChangeTime = millis();
+        }
     }
 
     lastEncoderA = currentEncoderA;
@@ -153,9 +188,6 @@ void loop()
                 Serial.println("50%");
                 break;
             case 3:
-                Serial.println("25%");
-                break;
-            case 4:
                 Serial.println("OFF");
                 break;
             }
@@ -177,31 +209,28 @@ void printCurrentColor()
     switch (colorIndex)
     {
     case 0:
-        Serial.println("Red");
+        Serial.println("White");
         break;
     case 1:
-        Serial.println("Green");
+        Serial.println("Red");
         break;
     case 2:
-        Serial.println("Blue");
+        Serial.println("Orange");
         break;
     case 3:
         Serial.println("Yellow");
         break;
     case 4:
-        Serial.println("Purple");
+        Serial.println("Green");
         break;
     case 5:
         Serial.println("Cyan");
         break;
     case 6:
-        Serial.println("White");
+        Serial.println("Blue");
         break;
     case 7:
-        Serial.println("Orange");
-        break;
-    case 8:
-        Serial.println("Dark Purple");
+        Serial.println("Purple");
         break;
     }
 }
